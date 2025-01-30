@@ -1,17 +1,20 @@
 const mongoose = require("mongoose");
 const redis = require("redis");
-const redisUrl = "redis://127.0.0.1:6379";
-const client = redis.createClient(redisUrl);
 const util = require("util");
+const keys = require("../config/keys.js");
 
-client.get = util.promisify(client.get); // to avoid callback, now client.get will return Promise
+const client = redis.createClient(keys.redisUrl);
+
+client.hget = util.promisify(client.hget); // to avoid callback, now client.get will return Promise
 
 const exec = mongoose.Query.prototype.exec;
 
 // create a new method cache in Query prototype:
 // to use it late in code, and mark does we need to cache this query or not
-mongoose.Query.prototype.cache = function () {
+mongoose.Query.prototype.cache = function (options = {}) {
   this.userCache = true; // create new property in this with boolean, to mark as to cache this query
+  this.hashKey = JSON.stringify(options.key || "");
+
   return this; // to continue chain
 };
 
@@ -36,7 +39,7 @@ mongoose.Query.prototype.exec = async function () {
 
   // Steps for Redis:
   // 1. See if we have a value for 'key' in Redis
-  const cacheValue = await client.get(key);
+  const cacheValue = await client.hget(this.hashKey, key);
 
   // 2. If we do, return that
   if (cacheValue) {
@@ -61,6 +64,12 @@ mongoose.Query.prototype.exec = async function () {
   // Otherwise, issue the query and store the result in Redis
 
   const result = await exec.apply(this, arguments); // execute original version of .exec
-  client.set(key, JSON.stringify(result));
+  client.hset(this.hashKey, key, JSON.stringify(result));
   return result;
+};
+
+module.exports = {
+  clearHash(hashKey) {
+    client.del(JSON.stringify(hashKey)); // cleat cached hash key
+  },
 };

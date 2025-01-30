@@ -1,0 +1,21 @@
+# structure for his project AdvancedNodeProject
+language: node_js
+node_js:
+  - "8"
+dist: trusty
+services:
+  - mongodb
+  - redis-server
+env:
+  - NODE_ENV=ci PORT=3000
+cache:
+  directions:
+    - node_modules
+    - client/node_modules
+install:
+  - npm install
+  - npm run build
+script:
+  - nohup npm run start & # nohop - Prevents the process from being terminated when the terminal session is closed.
+  - sleep 3
+  - npm run test
